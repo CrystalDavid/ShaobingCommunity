@@ -1,109 +1,59 @@
-# 烧饼社区（HarmonyOS）
+# 烧饼社区 · HarmonyOS
 
-LinuxSB 的非官方 HarmonyOS 原生客户端。当前邀请测试候选版本为 **1.1.1（versionCode 1001001，buildVersion 3）**：常规业务界面由 ArkUI / UI Design Kit 绘制；linux.sb 同源请求通过被原生根壳完全遮挡的 ArkWeb 会话宿主执行，以兼容 Cloudflare 挑战，只有官方登录或挑战需要人工操作时才显示网页。
+[LinuxSB](https://linux.sb/) 的非官方 HarmonyOS 原生客户端。使用 ArkTS、ArkUI 和 UI Design Kit，实现帖子浏览、板块、搜索、个人主页与发帖回复，配合蓝色主题、通透底栏和深浅色外观。
 
-> 当前状态：2026-08-30。活动产品使用 API 24 target、API 23 兼容下限；1.1.1 源码已在 Pura 90 API 24 模拟器与 Mate 80 Pro Max API 26 真机完成 Cloudflare、头像、首页滑动和根页面切换专项复验。API 26 的通用 `ImmersiveMaterial` 只属于后续 target 26 产品，不能与当前 HDS 能力探测或 API 24 回退混为一谈。
+## 功能
 
-## 技术路线
+- **社区浏览**：首页连续分页，按板块与排序方式查看帖子。
+- **主题详情**：原生正文、回复和楼中楼排版，头像与图片按需加载。
+- **搜索与个人主页**：搜索标题、正文和回帖，查看自己的主题与回复。
+- **发布与互动**：登录后撰写主题和回复。
+- **外观设置**：浅色、深色与跟随系统，两种首页帖子排版。
+- **会话恢复**：接入官方登录与 Cloudflare 挑战流程，完成后返回原生界面。
 
-```text
-ArkUI / UI Design Kit 页面
-  ↓
-ViewModel / Repository
-  ↓
-RcpForumTransport → ArkWebForumBridge（同源浏览器 fetch；未就绪时 RCP 回退）
-  ↓
-linux.sb BBS1 HTML
-  ↓
-版本化单遍解码器（TaskPool，不构建 DOM/CSSOM）
-  ↓
-领域模型 / Presentation Mapper
-  ↓
-ArkUI 原生列表、详情、图片、编辑器与导航
+## 从源码运行
+
+需要 **DevEco Studio 6.1.1 / API 24 SDK**。工程的兼容下限是 **HarmonyOS API 23**。
+
+```bash
+git clone https://github.com/CrystalDavid/ShaobingCommunity.git
 ```
 
-登录与 Cloudflare 挑战恢复：
+1. 用 DevEco Studio 打开仓库根目录，完成依赖同步。
+2. 为本机设备或模拟器配置调试签名。
+3. 选择 `entry` 模块与目标设备，点击 Run。
+4. 进入首页浏览帖子；通过“我的”完成官方账号登录后使用搜索和发帖等功能。
 
-```text
-原生登录入口
-  ↓
-OfficialLoginPage 打开 https://linux.sb/login 或官方挑战页
-  ↓
-与隐藏传输宿主共享 User-Agent 和 ArkWeb Cookie 会话
-  ↓
-挑战通过后由浏览器同源 fetch 携带 Cookie
-  ↓
-关闭可见网页，原生页面自动重载；隐藏宿主继续服务同源请求
-```
+也可以在 DevEco 配置好的终端中构建：
 
-## 原生性审计
-
-| 范围 | 结论 | 说明 |
-| --- | --- | --- |
-| 首页、板块、称号、我的、搜索、设置、发帖、主题详情、回复 | 原生可见 UI | 使用 ArkUI 与 `HdsNavigation / HdsTabs / HdsActionBar`；隐藏传输 Web 不绘制业务界面且不可命中 |
-| 底部 Tab 图标 | 原生 | 板块/称号/我的使用系统 `SymbolGlyph`；首页使用 ArkUI `Path` 绘制，不使用 SVG 或位图 Tab 图标 |
-| linux.sb 网络、分页、搜索、写入 | 设备内同源浏览器会话 | `ArkWebForumBridge` 注入同源 `fetch`，由 Chromium 管理 Cloudflare 与论坛 Cookie；Repository、解码和 UI 契约不变，RCP 仅作未就绪回退 |
-| HTML 处理 | 原生执行，但数据源是网页协议 | BBS1 HTML 在 TaskPool 中由版本化状态机解码，不加载 CSS、不执行网页 JavaScript、不渲染 DOM |
-| 头像与帖子图片 | 原生组件承载外部内容 | 同源头像由浏览器会话拉取后解码为 PixelMap 并以 ArkUI `Image` 绘制；其它 CDN 图片继续由原生 `Image` 懒加载 |
-| 投喂开发者 | 原生华为能力 | ArkUI 底部弹窗选择一次性档位，由 IAP Kit `createPurchase` 打开华为收银台；应用不自建支付页，也不把论坛 Cookie 发送给华为 |
-| 玻璃与沉浸效果 | 原生 ArkUI | 当前 API 23–24 普通组件统一使用 4vp / 1.42 饱和度 / 0.98 亮度 / 低 alpha 冷色 tint 的唯一一层 `backgroundEffect`，深浅模式分别取资源；HDS 标题栏继续能力探测并优先 `ADAPTIVE`。API 26 的通用 `ImmersiveMaterial` 需在 target 26 产品中另行守卫接入，迁移时不得删除当前回退 |
-| 官方登录 / Cloudflare 挑战正文 | **非 ArkUI 页面** | 只有需要用户登录或完成人机验证时可见；挑战资源仅放行精确 `https://challenges.cloudflare.com`，完成后自动返回原生页面 |
-| 运行时第三方 UI 框架 | 无 | 项目没有 React Native、Flutter、uni-app、Cordova、WebView 套壳依赖；运行时依赖表为空 |
-
-`scripts/NoWebOutsideLogin.ps1` 将 Web 构造器锁定在 `OfficialLoginPage.ets` 与 `ArkWebTransportHost.ets`，并把 ArkWeb import 限制在 `services/auth`。正常布局树预期只有 1 个隐藏传输 Web；可见业务节点仍全部是 ArkUI。
-
-## 当前 UI 与细节
-
-- 底部为 264×56vp 的“首页 / 板块 / 称号 / 我的”四栏单层通透玻璃。首页右侧以 8vp 间隔放置同高 56×56vp 发帖加号，Dock 总宽 328vp；“我的”同位置显示系统设置按钮；两枚右侧动作在浅色模式使用黑色主题前景、深色模式自动使用白色主题前景。板块与称号不显示右侧动作，托盘以既有弹簧曲线右移 32vp 后居中。当前四栏视觉实现由 `scripts/CheckBottomTabVisualLock.ps1` 锁定。
-- 首页保留“标题优先 / 作者优先”两种展示；作者优先头像为 38vp。置顶、精华、热、抽奖中、进行中、已结束均使用独立语义色。
-- 首页、板块、称号、我的四个根页左上角标题统一为 28vp、Bold；设置、发表、详情等压栈页保持 22vp、Bold。首页、板块目录名称和具体板块主题标题统一为 17vp、500 字重。板块首行上移 16vp，在删除大块空白的同时保留适度标题间距。
-- 首页与具体板块使用标题栏右端的紧凑玻璃按钮：只显示居中的 15vp 当前排序文字，不显示展开箭头；点击后展开“新评论 / 新帖子 / 精华 / 抽奖 / 发卡 / 足迹”，板块目录页不显示该按钮。
-- 搜索框去除 `TextInput` 的额外默认左右内边距，提示文字向图标靠近；42vp 玻璃提交按钮与输入框同高，复用回复按钮的 24vp/800 `arrow_up` 并旋转 90°形成向右箭头。
-- 搜索范围“标题 / 正文 / 回帖”使用每段 52×32vp 的紧凑满圆胶囊，保持可点击与水平拖动，不跟随 42vp 主搜索控件放大。
-- 标题栏搜索、筛选与所有返回按钮统一使用 40vp 点击区；搜索/返回图标统一为 24vp。首页搜索图标与筛选文字在浅色模式使用黑色主题前景、深色模式使用白色主题前景。主题详情摘要顶部内边距为 4vp，标题紧邻标题栏；滚动折叠后分类标签相对标题起点右缩 12vp。
-- “我的”主题/回帖列表单独使用 40vp 头像，标题到分类标签及作者行的间距为 8vp；其他主题流继续保留各自既定头像尺寸和排版。
-- “我的”入口为两行四列，并提供原生个人设置：展示真实账号资料，支持按原站契约修改用户名、头像、简介与密码；烧饼余额、兑换、收支明细和充值申请保持窄屏安全布局。
-- 回复栏取消左侧编辑图标；输入框与玻璃发送按钮同为 42vp，发送端使用 24vp/800 的系统 `arrow_up`。箭头始终保持品牌蓝，不因未登录或空草稿变灰，且不再叠加蓝色实心圆底。
-- 未登录搜索页不创建输入、提交或搜索范围切换控件，只显示与“我的”完全同尺寸、同位置的共享登录门禁；两页统一使用 24vp 父级顶部内边距，登录后搜索控件仍取消额外顶部内边距。
-- 未登录发表主题页只显示登录门禁。门禁固定在“发表主题”标题栏正下方，不带外框；板块、标题、正文与发布按钮均不渲染。
-- 登录后发表主题页直接以两列网格展示全部真实板块，发布按钮为 40vp 圆润玻璃胶囊。
-- 官方登录页标题和“完成并返回”按钮按系统顶部安全区下移；旧“临时网页登录……”说明已删除。
-- 深浅色支持“跟随系统 / 浅色 / 深色”，首页展示偏好与主题偏好均本地持久化。
-- 全局玻璃只保留低遮罩的“通透”配方；奶白配方和设置入口已删除，升级时旧持久值自动迁移为通透。
-- 页面结构层不再铺纯白或异色底板：称号卡片、设置分组、交易/表单卡片与空态都使用页面同色背景，仅由间距、细边和圆角区分。称号中心六个横向胶囊与交易子页胶囊复用 API 23–24 的单层通透玻璃；未选中透明采样，选中项保持主题主前景实底。
-- “我的交易”固定分为发布记录和交易记录。发布卡按“称号 / 单价 / 状态 / 编号与日期”排列；交易记录标题与上方卡片保留额外 8vp 间距，流水采用无头像的紧凑分隔列表。
-- 设置页保持两级原生结构：第一张两行圆角卡展示“外观主题 / 首页帖子样式”，第二张同规格卡展示“投喂开发者 / 反馈”。投喂弹窗提供硬币 ¥1、水 ¥5、咖啡 ¥9.9、pro 订阅 ¥50 四个**一次性、非自动续费**档位，并交由华为收银台处理；反馈直接进入原生帖子详情 `topic/17803`。主题详情使用浅色、深色两列大预览，首页样式使用两张帖子排版预览；选择状态先更新本地响应式状态，再应用并持久化。
-
-### 全局字号规范
-
-业务文字只使用 `DesignSystem.Typography` 定义的 11 / 12 / 13 / 14 / 15 / 16 / 17 / 18 / 20 / 22 / 24 / 26 / 28vp 十三档。每一档的使用场景、字重、行高以及深浅色玻璃参数统一维护在 [`docs/ui.md`](docs/ui.md)，README 不再复制第二份容易漂移的表格。
-
-## 构建与验证
-
-工程为 Stage 模型、ArkTS，当前 `targetSdkVersion` 是 API 24，`compatibleSdkVersion` 是 API 23。同一份 signed HAP 必须分别安装到 Pura 90 API 24 与 API 26 验证向上运行兼容和 HDS 能力探测；通用 API 26 `ImmersiveMaterial` 需要另一个 target 26 构建证据，不能由 API 24 HAP 推断。完整兼容契约见 [`docs/development.md`](docs/development.md)。
-
-交付门槛：
-
-```text
+```powershell
 hvigor assembleHap
+```
+
+构建环境和签名步骤见 [开发指南](docs/development.md)，安装与发布流程见 [发布指南](docs/release-testing.md)。当前源码版本为 **1.1.1**，发布进展见 [项目状态](docs/project-status.md)。
+
+## 实现方式
+
+```text
+ArkUI 页面 → ViewModel / Repository → 同源网络会话
+          → BBS1 HTML 解码（TaskPool）→ 领域模型 → 原生界面
+```
+
+业务界面由 ArkUI 绘制。网络层使用 ArkWeb 同源会话处理论坛登录与 Cloudflare，未就绪时由 RCP 回退；登录或挑战需要操作时显示官方网页。字体、颜色、通透材质与组件尺寸由共享设计系统管理。
+
+| 路径 | 内容 |
+| --- | --- |
+| [entry](entry/) | 主应用模块、页面、组件、网络与数据层 |
+| [AppScope](AppScope/) | 应用配置与资源 |
+| [scripts](scripts/) | 原生页面范围和底栏视觉检查 |
+| [docs](docs/index.md) | 架构、设计、开发与发布文档 |
+
+## 开发检查
+
+```powershell
 powershell -ExecutionPolicy Bypass -File scripts/NoWebOutsideLogin.ps1
 powershell -ExecutionPolicy Bypass -File scripts/CheckBottomTabVisualLock.ps1
 ```
 
-当前仓库按维护者要求不保留 `src/test`、`src/ohosTest` 和 mock 测试源码；91/91 单元测试与 13/13 模拟器设备测试是删除前的历史通过记录，保存在项目状态文档中，不代表未来改动已自动回归。当前提交必须至少完成 HAP 构建、两项静态保护脚本和人工设备复验。真实发帖与回复只能由用户在 App 内明确确认。
-
-## 文档
-
-- [`docs/index.md`](docs/index.md)：完整文档索引与更新规则。
-- [`docs/architecture.md`](docs/architecture.md)：原生架构、目录职责与依赖边界。
-- [`docs/ui.md`](docs/ui.md)：字号、色彩、深浅色玻璃、组件尺寸与交互规范。
-- [`docs/development.md`](docs/development.md)：工程环境、仓库结构、构建与 Git 规范。
-- [`docs/testing.md`](docs/testing.md)：单元、设备、视觉和安全验收门槛。
-- [`docs/performance.md`](docs/performance.md)：原生缓存、懒列表、华为性能工具与当前实测数据。
-- [`docs/security.md`](docs/security.md)：登录、Cookie、写入、日志与签名边界。
-- [`docs/privacy-policy.md`](docs/privacy-policy.md)：面向测试用户和发布审核的隐私政策正文。
-- [`docs/release-testing.md`](docs/release-testing.md)：真机安装、release 签名、邀请测试与 AppGallery Connect 阶段门。
-- [`docs/project-status.md`](docs/project-status.md)：完整产品基线和当前阶段状态。
-- [`docs/p0-report.md`](docs/p0-report.md)：冻结的 P0 / P0-B 历史证据。
-
-根目录只保留 `README.md`、`AGENTS.md`、源码模块和构建入口；构建产物、截图、日志、本地 SDK 路径与签名材料均由 `.gitignore` 排除。
+- [架构](docs/architecture.md) · [UI 设计](docs/ui.md) · [性能](docs/performance.md)
+- [测试说明](docs/testing.md) · [隐私政策](docs/privacy-policy.md)
